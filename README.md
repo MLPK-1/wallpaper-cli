@@ -1,0 +1,153 @@
+# wallpaper-cli
+
+A feature-rich wallpaper manager for Linux/GNOME with an interactive terminal UI.
+Pulls images from multiple sources, rotates automatically on a schedule, and supports
+presets so you can switch themes with a single command.
+
+```
+╭──────────────── 🖼  Wallpaper CLI ────────────────╮
+│  last:  "Milky Way Over the Alps"  ·  nasa  ·  2h ago  │
+│  mode:  🚀 space  ·  ⚙ auto  ·  every 24h            │
+╰───────────────────────────────────────────────────╯
+
+  j/k ↑↓ navigate   Enter select   Ctrl+C exit
+
+? What would you like to do?
+❯  🔄  Fetch new wallpaper now
+   ⭐  Browse featured presets
+   🎨  Switch active preset
+   ✏   Create custom preset
+   ...
+```
+
+## Image sources
+
+| Source | Free | Requires key |
+|---|---|---|
+| 🌐 Wallhaven | ✅ | No |
+| 🌍 Bing Daily | ✅ | No |
+| 💬 Reddit | ✅ | No |
+| 🚀 NASA APOD | ✅ | Optional (higher quota) |
+| 🌄 Unsplash | ✅ | Yes (free) |
+| 📸 Pexels | ✅ | Yes (free) |
+| 🖼  Pixabay | ✅ | Yes (free) |
+| 🎭 DeviantArt | ✅ | Yes (free OAuth app) |
+
+Four sources (Wallhaven, Bing, Reddit, NASA) work with **no API keys at all**.
+
+## Requirements
+
+- Linux with GNOME desktop (uses `gsettings` to set the wallpaper)
+- Python 3.9+
+- `pipx` (recommended) or `pip`
+
+## Installation
+
+### With pipx (recommended for CLI tools)
+
+```bash
+# install pipx if you don't have it
+sudo apt install pipx   # Ubuntu/Debian
+pipx ensurepath
+
+# install wallpaper-cli
+pipx install git+https://github.com/yourusername/wallpaper-cli
+```
+
+### With pip
+
+```bash
+pip install --user git+https://github.com/yourusername/wallpaper-cli
+```
+
+After installation the `wallpaper` command is available in your terminal.
+
+## First-time setup
+
+Run the interactive menu:
+
+```bash
+wallpaper
+```
+
+The app works immediately using free sources (Wallhaven, Bing, Reddit, NASA APOD).
+To add more sources, run **Setup API keys** from the menu, or:
+
+```bash
+wallpaper setup
+```
+
+Keys are stored locally in `~/.config/wallpaper/config.json` and never leave your machine.
+
+## Usage
+
+```
+wallpaper                   open interactive menu (default)
+wallpaper now               fetch a new wallpaper immediately
+wallpaper setup             configure API keys
+wallpaper featured          browse built-in presets
+wallpaper new               create a custom preset
+wallpaper use "My Preset"   switch to a saved preset
+wallpaper presets           list all saved presets
+wallpaper status            show current config and source status
+wallpaper history           show recent wallpaper history
+```
+
+## Styles
+
+| Style | Description |
+|---|---|
+| `realistic` | Photos of nature, cities, landscapes |
+| `anime` | Illustrated anime and manga art |
+| `gaming` | Game art and in-game screenshots |
+| `space` | Astronomy and space photography |
+| `minimal` | Clean, simple, minimalist designs |
+| `dark` | Dark-themed art and photography |
+| `custom` | Freeform — driven entirely by your query |
+
+## Featured presets
+
+Ten built-in presets are included (accessible from the menu or `wallpaper featured`):
+
+- 🚀 NASA Photo of the Day
+- 🌍 Bing World Scenery
+- 🌸 Studio Ghibli Landscapes
+- 🏙 Cyberpunk Cities
+- 🎮 Pixel Art Landscapes
+- 💮 Anime Illustrations
+- ✨ Deep Space
+- 🎵 Lo-Fi Aesthetic
+- ◻ Minimal Dark
+- 🌿 Fantasy Worlds
+
+## Automatic rotation (GNOME cron)
+
+From the menu go to **Change settings → Interval** to set a rotation interval.
+The app installs a cron job that runs `wallpaper _fetch` on that schedule.
+
+## Optional: keyboard shortcut
+
+To bind `Ctrl+Alt+M` → fetch a new wallpaper now:
+
+```bash
+wallpaper shortcut
+```
+
+Or set it manually in GNOME Settings → Keyboard → Custom Shortcuts,
+with the command `wallpaper now`.
+
+## Upgrading
+
+```bash
+pipx upgrade wallpaper-cli
+# or
+pipx install --force git+https://github.com/yourusername/wallpaper-cli
+```
+
+## Uninstalling
+
+```bash
+pipx uninstall wallpaper-cli
+```
+
+Config and history are kept in `~/.config/wallpaper/` — delete that folder to fully clean up.

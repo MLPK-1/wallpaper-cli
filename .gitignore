@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# config & secrets (stored in ~/.config/wallpaper/, never committed)
+*.json
+!sample_config.json
