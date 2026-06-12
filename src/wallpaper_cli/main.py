@@ -29,7 +29,7 @@ HISTORY_FILE = HOME / ".local" / "share" / "wallpaper" / "history.json"
 WALLPAPER_DIR = HOME / "Pictures" / "wallpapers"
 THUMB_DIR     = WALLPAPER_DIR / "thumbs"
 CURRENT_PATH  = WALLPAPER_DIR / "current.jpg"
-GDM_SCRIPT    = HOME / "update_gdm_wallpaper.sh"
+GDM_SCRIPT    = HOME / ".config" / "wallpaper" / "update_gdm_wallpaper.sh"
 DA_TOKEN_FILE = HOME / ".config" / "wallpaper" / "deviantart_token.json"
 
 # ── Sources ───────────────────────────────────────────────────────────────────
@@ -310,7 +310,7 @@ def time_ago(dt_str):
 
 
 def update_cron(hours):
-    wallpaper_bin = str(HOME / ".local" / "bin" / "wallpaper")
+    wallpaper_bin = shutil.which("wallpaper") or str(HOME / ".local" / "bin" / "wallpaper")
     try:
         result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
         lines = result.stdout.splitlines()
