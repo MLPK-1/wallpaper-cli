@@ -153,11 +153,11 @@ FEATURED_PRESETS = [
         "style": "realistic", "source": "bing", "query": "nature", "color": None, "interval_hours": 3,
     },
     {
-        "key": "ghibli-landscapes",
+        "key": "painted-landscapes",
         "icon": "🌸",
-        "name": "Studio Ghibli Landscapes",
-        "description": "Dreamy painted landscapes inspired by Ghibli films",
-        "style": "custom", "source": "auto", "query": "studio ghibli landscape", "color": None, "interval_hours": 3,
+        "name": "Painted Landscapes",
+        "description": "Dreamy hand-painted fantasy landscapes and scenery",
+        "style": "custom", "source": "auto", "query": "painted fantasy landscape scenery", "color": None, "interval_hours": 3,
     },
     {
         "key": "cyberpunk-cities",

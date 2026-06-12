@@ -110,14 +110,14 @@ Ten built-in presets are included (accessible from the menu or `wallpaper featur
 
 - 🚀 NASA Photo of the Day
 - 🌍 Bing World Scenery
-- 🌸 Studio Ghibli Landscapes
+- 🌸 Painted Landscapes
 - 🏙 Cyberpunk Cities
 - 🎮 Pixel Art Landscapes
 - 💮 Anime Illustrations
 - ✨ Deep Space
 - 🎵 Lo-Fi Aesthetic
 - ◻ Minimal Dark
-- 🌿 Fantasy Worlds
+- 🐉 Fantasy Worlds
 
 ## Automatic rotation (GNOME cron)
 
@@ -146,3 +146,25 @@ pipx uninstall wallpaper-cli
 ```
 
 Config and history are kept in `~/.config/wallpaper/` — delete that folder to fully clean up.
+
+## Image licenses and copyright
+
+**wallpaper-cli is a tool, not a content provider.** All images are fetched live from
+third-party services at your request. Each image is subject to the license of its
+original source:
+
+| Source | License / terms |
+|---|---|
+| NASA APOD | U.S. government works — generally public domain. Some images credit contractors and may differ — check the APOD page. |
+| Wallhaven | Images are user-submitted. License varies per image. For personal desktop use. |
+| Reddit | Images are posted by users. License varies. For personal desktop use. |
+| Unsplash | [Unsplash License](https://unsplash.com/license) — free for personal and commercial use, no attribution required. |
+| Pexels | [Pexels License](https://www.pexels.com/license/) — free for personal use. |
+| Pixabay | [Pixabay License](https://pixabay.com/service/license-summary/) — free for personal use. |
+| DeviantArt | Images are copyrighted by their creators. For personal desktop use. |
+| Bing Daily | Images are licensed by Microsoft. Bing does not publish an official API for these — this uses an undocumented endpoint. For personal desktop use only. |
+
+**This tool is intended for personal desktop wallpaper use only.** Do not redistribute,
+sell, or publish images obtained through it without verifying the license of each image.
+The tool's own code is MIT licensed — that applies only to the software itself, not to
+any images it downloads.
