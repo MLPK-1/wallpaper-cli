@@ -33,8 +33,8 @@ dependencies = [
 wallpaper = "wallpaper_cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/wallpaper-cli"
-Issues   = "https://github.com/yourusername/wallpaper-cli/issues"
+Homepage = "https://github.com/MLPK-1/wallpaper-cli"
+Issues   = "https://github.com/MLPK-1/wallpaper-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wallpaper_cli"]

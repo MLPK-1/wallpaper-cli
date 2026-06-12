@@ -51,13 +51,13 @@ sudo apt install pipx   # Ubuntu/Debian
 pipx ensurepath
 
 # install wallpaper-cli
-pipx install git+https://github.com/yourusername/wallpaper-cli
+pipx install git+https://github.com/MLPK-1/wallpaper-cli
 ```
 
 ### With pip
 
 ```bash
-pip install --user git+https://github.com/yourusername/wallpaper-cli
+pip install --user git+https://github.com/MLPK-1/wallpaper-cli
 ```
 
 After installation the `wallpaper` command is available in your terminal.
@@ -141,7 +141,7 @@ with the command `wallpaper now`.
 ```bash
 pipx upgrade wallpaper-cli
 # or
-pipx install --force git+https://github.com/yourusername/wallpaper-cli
+pipx install --force git+https://github.com/MLPK-1/wallpaper-cli
 ```
 
 ## Uninstalling
