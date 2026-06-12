@@ -24,7 +24,6 @@ classifiers = [
     "Topic :: Desktop Environment",
 ]
 dependencies = [
-    "requests>=2.28",
     "rich>=13.0",
     "questionary>=2.0",
 ]

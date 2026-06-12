@@ -99,7 +99,6 @@ wallpaper history           show recent wallpaper history
 |---|---|
 | `realistic` | Photos of nature, cities, landscapes |
 | `anime` | Illustrated anime and manga art |
-| `gaming` | Game art and in-game screenshots |
 | `space` | Astronomy and space photography |
 | `minimal` | Clean, simple, minimalist designs |
 | `dark` | Dark-themed art and photography |
@@ -127,14 +126,10 @@ The app installs a cron job that runs `wallpaper _fetch` on that schedule.
 
 ## Optional: keyboard shortcut
 
-To bind `Ctrl+Alt+M` → fetch a new wallpaper now:
+To bind a key to fetch a new wallpaper instantly, add a custom shortcut in
+**GNOME Settings → Keyboard → Custom Shortcuts** with the command `wallpaper now`.
 
-```bash
-wallpaper shortcut
-```
-
-Or set it manually in GNOME Settings → Keyboard → Custom Shortcuts,
-with the command `wallpaper now`.
+A common choice is `Ctrl+Alt+M`.
 
 ## Upgrading
 

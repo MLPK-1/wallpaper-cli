@@ -310,6 +310,12 @@ def time_ago(dt_str):
 
 
 def update_cron(hours):
+    if not shutil.which("crontab"):
+        console.print(
+            "  [yellow]⚠[/yellow]  [bold]crontab[/bold] not found — auto-rotation not set up.\n"
+            "  Install [bold]cron[/bold] ([dim]sudo apt install cron[/dim]) or add a systemd timer manually."
+        )
+        return False
     wallpaper_bin = shutil.which("wallpaper") or str(HOME / ".local" / "bin" / "wallpaper")
     try:
         result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
@@ -332,16 +338,8 @@ def update_cron(hours):
 
 
 def require_questionary():
-    try:
-        import questionary
-        return questionary
-    except ImportError:
-        console.print(
-            "\n  [red]questionary[/red] is required for interactive prompts.\n"
-            "  Install it with:\n\n"
-            "    [bold cyan]sudo apt install python3-questionary[/bold cyan]\n"
-        )
-        sys.exit(1)
+    import questionary
+    return questionary
 
 
 # ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -708,9 +706,13 @@ def fetch_bing(cfg):
         raise ValueError("No Bing wallpapers returned")
     chosen = random.choice(images)
     urlbase = chosen.get("urlbase", "")
+    # Validate urlbase is a plain path so it cannot redirect to a different host
+    if not urlbase.startswith("/") or "//" in urlbase or "@" in urlbase:
+        raise ValueError(f"Bing returned unexpected urlbase: {urlbase!r}")
+    url_field = chosen.get("url", "")
     return {
         "image_url": f"https://www.bing.com{urlbase}_UHD.jpg",
-        "photo_url": f"https://www.bing.com{chosen.get('url', '')}",
+        "photo_url": f"https://www.bing.com{url_field}",
         "photographer": chosen.get("copyright", "Microsoft Bing"),
         "description": chosen.get("title", "Bing Daily Wallpaper"),
         "location": None,
@@ -722,8 +724,19 @@ def fetch_bing(cfg):
 def download_image(url, dest):
     req = urllib.request.Request(url, headers={"User-Agent": "WallpaperCLI/2.0"})
     with urllib.request.urlopen(req, timeout=60) as r:
-        with open(dest, "wb") as f:
-            shutil.copyfileobj(r, f)
+        content_type = r.headers.get("Content-Type", "")
+        if not content_type.startswith("image/"):
+            raise ValueError(f"Server returned non-image content-type: {content_type!r}")
+        # Write to a temp file then atomically replace to avoid a partial file
+        # being used as wallpaper if the download is interrupted mid-way.
+        tmp = Path(str(dest) + ".tmp")
+        try:
+            with open(tmp, "wb") as f:
+                shutil.copyfileobj(r, f)
+            os.replace(tmp, dest)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def make_thumb(src, dst):
@@ -738,6 +751,13 @@ def make_thumb(src, dst):
 
 
 def apply_wallpaper(path):
+    if not shutil.which("gsettings"):
+        print(
+            "wallpaper: gsettings not found — is GNOME installed? "
+            "Wallpaper was downloaded but not applied.",
+            file=sys.stderr,
+        )
+        return
     uri = f"file://{path}"
     for schema, key in [
         ("org.gnome.desktop.background", "picture-uri"),
@@ -773,8 +793,10 @@ def do_fetch(silent=False):
     is_auto = cfg.get("source", "auto") == "auto"
     style = cfg.get("style", "realistic")
 
+    _err_console = Console(stderr=True) if silent else console
+
     def _log(msg):
-        (console.print if not silent else lambda m: print(m, file=sys.stderr))(f"  [red]✗[/red] {msg}")
+        _err_console.print(f"  [red]✗[/red] {msg}")
 
     info = None
 
@@ -813,8 +835,7 @@ def do_fetch(silent=False):
     try:
         download_image(info["image_url"], CURRENT_PATH)
     except Exception as e:
-        msg = f"Download failed: {e}"
-        (console.print if not silent else lambda m: print(m, file=sys.stderr))(f"  [red]✗[/red] {msg}")
+        _log(f"Download failed: {e}")
         return None
 
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -1016,8 +1037,9 @@ def cmd_set(args):
             return
         try:
             hours = int(value[0].rstrip("h"))
-            assert hours >= 1
-        except Exception:
+            if hours < 1:
+                raise ValueError("interval must be at least 1")
+        except (ValueError, IndexError):
             console.print("[red]Must be a positive number of hours, e.g. 3 or 3h[/red]")
             return
         cfg["interval_hours"] = hours
@@ -1838,7 +1860,11 @@ def main():
         "delete":   cmd_delete,
         "use":      cmd_use,
         "set":      cmd_set,
-    }.get(args.command, cmd_menu)(args)
+    }
+    try:
+        dispatch.get(args.command, cmd_menu)(args)
+    except KeyboardInterrupt:
+        sys.exit(130)
 
 
 if __name__ == "__main__":
