@@ -1845,7 +1845,7 @@ def main():
 
     args = parser.parse_args()
 
-    {
+    dispatch = {
         None:       cmd_menu,
         "menu":     cmd_menu,
         "setup":    cmd_setup,
