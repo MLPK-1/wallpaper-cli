@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wallpaper-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "A feature-rich wallpaper manager for Linux/GNOME — pulls images from Wallhaven, Reddit, DeviantArt, Unsplash, Pexels, Pixabay, NASA APOD, and Bing Daily."
 readme = "README.md"
 license = { text = "MIT" }
@@ -28,6 +28,12 @@ dependencies = [
     "questionary>=2.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
 [project.scripts]
 wallpaper = "wallpaper_cli.main:main"
 
@@ -37,3 +43,8 @@ Issues   = "https://github.com/MLPK-1/wallpaper-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wallpaper_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]

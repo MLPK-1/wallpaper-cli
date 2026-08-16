@@ -1,14 +1,14 @@
 """wallpaper — modern wallpaper manager CLI"""
 
-__version__ = "0.1.0"
-
 import argparse
 import json
 import os
 import random
+import shlex
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,8 +18,13 @@ from pathlib import Path
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.rule import Rule
+from rich.table import Table
+
+try:
+    from wallpaper_cli import __version__  # single source of truth (package __init__)
+except ImportError:  # pragma: no cover - bare-script fallback
+    __version__ = "0.2.0"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 HOME = Path.home()
@@ -216,33 +221,57 @@ console = Console()
 # ── Config & presets ──────────────────────────────────────────────────────────
 def load_config():
     if CONFIG_FILE.exists():
-        with open(CONFIG_FILE) as f:
-            cfg = {**DEFAULT_CONFIG, **json.load(f)}
+        try:
+            with open(CONFIG_FILE) as f:
+                cfg = {**DEFAULT_CONFIG, **json.load(f)}
+        except (json.JSONDecodeError, OSError):
+            cfg = DEFAULT_CONFIG.copy()
     else:
         cfg = DEFAULT_CONFIG.copy()
+
     # Sanitize color: must be a known key or None
     if cfg.get("color") not in (list(COLORS.keys()) + [None]):
         cfg["color"] = None
+
+    # Sanitize style / source: must be known keys or the safe defaults
+    if cfg.get("style") not in STYLES:
+        cfg["style"] = DEFAULT_CONFIG["style"]
+    valid_sources = {"auto"} | set(SOURCES)
+    if cfg.get("source") not in valid_sources:
+        cfg["source"] = DEFAULT_CONFIG["source"]
+
+    # Coerce numeric settings; a hand-edited config must not crash the CLI
+    try:
+        cfg["interval_hours"] = int(cfg.get("interval_hours", 3))
+        if cfg["interval_hours"] < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        cfg["interval_hours"] = DEFAULT_CONFIG["interval_hours"]
+    try:
+        cfg["resolution_width"] = int(cfg.get("resolution_width", 3840))
+        if cfg["resolution_width"] < 640:
+            raise ValueError
+    except (TypeError, ValueError):
+        cfg["resolution_width"] = DEFAULT_CONFIG["resolution_width"]
     return cfg
 
 
 def save_config(cfg):
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(cfg, f, indent=2)
+    _atomic_write_json(CONFIG_FILE, cfg)
 
 
 def load_presets():
     if PRESETS_FILE.exists():
-        with open(PRESETS_FILE) as f:
-            return json.load(f)
+        try:
+            with open(PRESETS_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
     return {}
 
 
 def save_presets(presets):
-    PRESETS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(PRESETS_FILE, "w") as f:
-        json.dump(presets, f, indent=2)
+    _atomic_write_json(PRESETS_FILE, presets)
 
 
 def _auto_sources(cfg):
@@ -281,9 +310,21 @@ def resolve_source(cfg):
 # ── History ───────────────────────────────────────────────────────────────────
 def load_history():
     if HISTORY_FILE.exists():
-        with open(HISTORY_FILE) as f:
-            return json.load(f)
+        try:
+            with open(HISTORY_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
     return []
+
+
+def _atomic_write_json(path, obj):
+    """Write JSON atomically so a crash mid-write cannot corrupt the file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(str(path) + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
 
 
 def append_history(entry):
@@ -292,8 +333,7 @@ def append_history(entry):
     history.append(entry)
     if len(history) > 100:
         history = history[-100:]
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
+    _atomic_write_json(HISTORY_FILE, history)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -317,6 +357,8 @@ def update_cron(hours):
         )
         return False
     wallpaper_bin = shutil.which("wallpaper") or str(HOME / ".local" / "bin" / "wallpaper")
+    # Quote the path so a home dir containing spaces does not corrupt the crontab
+    cron_cmd = f"{shlex.quote(wallpaper_bin)} _fetch"
     try:
         result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
         lines = result.stdout.splitlines()
@@ -324,12 +366,12 @@ def update_cron(hours):
         replaced = False
         for line in lines:
             if "update_wallpaper.sh" in line or ("wallpaper" in line and "_fetch" in line):
-                new_lines.append(f"0 */{hours} * * * {wallpaper_bin} _fetch")
+                new_lines.append(f"0 */{hours} * * * {cron_cmd}")
                 replaced = True
             else:
                 new_lines.append(line)
         if not replaced:
-            new_lines.append(f"0 */{hours} * * * {wallpaper_bin} _fetch")
+            new_lines.append(f"0 */{hours} * * * {cron_cmd}")
         subprocess.run(["crontab", "-"], input="\n".join(new_lines) + "\n", text=True, check=True)
         return True
     except Exception as e:
@@ -343,10 +385,29 @@ def require_questionary():
 
 
 # ── HTTP helper ───────────────────────────────────────────────────────────────
-def _get(url, headers=None, timeout=15):
-    req = urllib.request.Request(url, headers={"User-Agent": "WallpaperCLI/2.0", **(headers or {})})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+def _get(url, headers=None, timeout=15, retries=3):
+    """GET + JSON-decode with transient-error retry (429/5xx, timeouts).
+
+    API hosts are rate-limited and occasionally flaky; a cron-driven fetcher
+    should survive a 429 rather than fail the whole rotation cycle.
+    """
+    last_error = None
+    for attempt in range(retries):
+        req = urllib.request.Request(url, headers={"User-Agent": "WallpaperCLI/2.0", **(headers or {})})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            last_error = e
+            if e.code not in (429, 500, 502, 503, 504):
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+            last_error = e
+        if attempt < retries - 1:
+            time.sleep(0.5 * (2 ** attempt))
+    if last_error is None:  # pragma: no cover - defensive, retries>=1
+        last_error = RuntimeError(f"GET failed after {retries} attempts: {url}")
+    raise last_error
 
 
 # ── Fetchers ──────────────────────────────────────────────────────────────────
@@ -721,7 +782,12 @@ def fetch_bing(cfg):
 
 
 # ── Image handling ────────────────────────────────────────────────────────────
-def download_image(url, dest):
+# A rogue/compromised image host must not be able to fill the disk; wallpaper
+# images are normally 1–30 MB, so 100 MB is an extremely generous ceiling.
+MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
+
+
+def download_image(url, dest, max_bytes=MAX_DOWNLOAD_BYTES):
     req = urllib.request.Request(url, headers={"User-Agent": "WallpaperCLI/2.0"})
     with urllib.request.urlopen(req, timeout=60) as r:
         content_type = r.headers.get("Content-Type", "")
@@ -731,8 +797,18 @@ def download_image(url, dest):
         # being used as wallpaper if the download is interrupted mid-way.
         tmp = Path(str(dest) + ".tmp")
         try:
+            downloaded = 0
             with open(tmp, "wb") as f:
-                shutil.copyfileobj(r, f)
+                while True:
+                    chunk = r.read(1024 * 256)
+                    if not chunk:
+                        break
+                    downloaded += len(chunk)
+                    if downloaded > max_bytes:
+                        raise ValueError(
+                            f"Download exceeded {max_bytes // (1024 * 1024)} MB limit — refusing to save"
+                        )
+                    f.write(chunk)
             os.replace(tmp, dest)
         except Exception:
             tmp.unlink(missing_ok=True)
@@ -740,14 +816,19 @@ def download_image(url, dest):
 
 
 def make_thumb(src, dst):
-    try:
-        subprocess.run(
-            ["convert", str(src), "-resize", "128x128^", "-gravity", "Center", "-extent", "128x128", str(dst)],
-            check=True, capture_output=True,
-        )
-        return True
-    except Exception:
-        return False
+    # ImageMagick 7 ships `magick`; v6 (and legacy distros) only have `convert`.
+    for tool in ("magick", "convert"):
+        if not shutil.which(tool):
+            continue
+        try:
+            subprocess.run(
+                [tool, str(src), "-resize", "128x128^", "-gravity", "Center", "-extent", "128x128", str(dst)],
+                check=True, capture_output=True,
+            )
+            return True
+        except Exception:
+            return False
+    return False
 
 
 def apply_wallpaper(path):
@@ -758,7 +839,7 @@ def apply_wallpaper(path):
             file=sys.stderr,
         )
         return
-    uri = f"file://{path}"
+    uri = Path(path).resolve().as_uri()
     for schema, key in [
         ("org.gnome.desktop.background", "picture-uri"),
         ("org.gnome.desktop.background", "picture-uri-dark"),
@@ -996,6 +1077,7 @@ def cmd_set(args):
         console.print("  wallpaper set [bold cyan]style[/bold cyan]             [dim]anime | realistic | cyberpunk | custom …[/dim]")
         console.print("  wallpaper set [bold cyan]source[/bold cyan]            [dim]auto | unsplash | pexels | pixabay | reddit | wallhaven | deviantart | nasa | bing[/dim]")
         console.print("  wallpaper set [bold cyan]interval[/bold cyan]          [dim]3h[/dim]")
+        console.print("  wallpaper set [bold cyan]resolution[/bold cyan]        [dim]2560  (download width in px)[/dim]")
         console.print("  wallpaper set [bold cyan]color[/bold cyan]             [dim]blue | teal | red … | none[/dim]")
         console.print("  wallpaper set [bold cyan]unsplash_key[/bold cyan]      [dim]<api_key>[/dim]")
         console.print("  wallpaper set [bold cyan]pexels_key[/bold cyan]        [dim]<api_key>[/dim]")
@@ -1028,7 +1110,7 @@ def cmd_set(args):
             console.print("[red]Unknown source.[/red]  Options: " + "  ".join(valid))
             return
         cfg["source"] = value[0]
-        label = f"auto (uses style default)" if value[0] == "auto" else value[0]
+        label = "auto (uses style default)" if value[0] == "auto" else value[0]
         console.print(f'\n  [green]✓[/green]  Source → [green]{label}[/green]')
 
     elif setting == "interval":
@@ -1036,7 +1118,7 @@ def cmd_set(args):
             console.print("[red]Usage:[/red] wallpaper set interval 3h")
             return
         try:
-            hours = int(value[0].rstrip("h"))
+            hours = int(value[0].rstrip("hH"))
             if hours < 1:
                 raise ValueError("interval must be at least 1")
         except (ValueError, IndexError):
@@ -1046,6 +1128,20 @@ def cmd_set(args):
         if not update_cron(hours):
             return
         console.print(f"\n  [green]✓[/green]  Interval → [green]{hours}h[/green]")
+
+    elif setting == "resolution":
+        if not value:
+            console.print("[red]Usage:[/red] wallpaper set resolution 2560")
+            return
+        try:
+            width = int(value[0])
+            if width < 640:
+                raise ValueError("resolution must be at least 640px wide")
+        except (ValueError, IndexError):
+            console.print("[red]Must be a pixel width of at least 640, e.g. 1920 or 2560[/red]")
+            return
+        cfg["resolution_width"] = width
+        console.print(f"\n  [green]✓[/green]  Resolution → [cyan]{width}px[/cyan]")
 
     elif setting == "color":
         color_names = list(COLORS.keys())
@@ -1096,7 +1192,7 @@ def cmd_set(args):
             console.print("[red]Usage:[/red] wallpaper set deviantart_id <your_client_id>")
             return
         cfg["deviantart_client_id"] = value[0]
-        console.print(f"\n  [green]✓[/green]  DeviantArt client_id saved")
+        console.print("\n  [green]✓[/green]  DeviantArt client_id saved")
 
     elif setting == "deviantart_secret":
         if not value:
@@ -1106,7 +1202,7 @@ def cmd_set(args):
         # Invalidate cached token so it re-authenticates with new credentials
         if DA_TOKEN_FILE.exists():
             DA_TOKEN_FILE.unlink()
-        console.print(f"\n  [green]✓[/green]  DeviantArt client_secret saved")
+        console.print("\n  [green]✓[/green]  DeviantArt client_secret saved")
 
     save_config(cfg)
     console.print("  [dim]Run [bold]wallpaper now[/bold] to apply immediately[/dim]\n")
@@ -1507,7 +1603,7 @@ def cmd_setup(_args=None):
                     DA_TOKEN_FILE.unlink()
 
     save_config(cfg)
-    console.print(f"\n  [green]✓[/green]  Configuration saved\n")
+    console.print("\n  [green]✓[/green]  Configuration saved\n")
 
 
 def cmd_featured(_args=None):
@@ -1833,10 +1929,10 @@ def main():
 
     s = sub.add_parser("set", help="Change a setting")
     s.add_argument("setting", nargs="?", metavar="setting",
-                   choices=["query", "style", "source", "interval", "color",
+                   choices=["query", "style", "source", "interval", "resolution", "color",
                             "unsplash_key", "pexels_key", "pixabay_key", "nasa_key",
                             "deviantart_id", "deviantart_secret"],
-                   help="query | style | source | interval | color | unsplash_key | pexels_key | pixabay_key | nasa_key | deviantart_id | deviantart_secret")
+                   help="query | style | source | interval | resolution | color | unsplash_key | pexels_key | pixabay_key | nasa_key | deviantart_id | deviantart_secret")
     s.add_argument("value", nargs="*", metavar="value")
 
     if len(sys.argv) > 1 and sys.argv[1] == "_fetch":
