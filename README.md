@@ -91,7 +91,18 @@ wallpaper use "My Preset"   switch to a saved preset
 wallpaper presets           list all saved presets
 wallpaper status            show current config and source status
 wallpaper history           show recent wallpaper history
+wallpaper set query "rainy city"
+wallpaper set style anime
+wallpaper set source nasa
+wallpaper set interval 6h
+wallpaper set resolution 2560
+wallpaper set color teal
 ```
+
+`wallpaper set resolution <px>` controls the download width used for sources
+that support it (Unsplash; default 3840). A hand-edited `config.json` is
+validated on load — unknown styles/sources and out-of-range numbers fall
+back to safe defaults instead of breaking the CLI.
 
 ## Styles
 
@@ -138,6 +149,20 @@ pipx upgrade wallpaper-cli
 # or
 pipx install --force git+https://github.com/MLPK-1/wallpaper-cli
 ```
+
+## Development
+
+```bash
+git clone https://github.com/MLPK-1/wallpaper-cli
+cd wallpaper-cli
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest            # 87 tests, fully offline (network + subprocess are mocked)
+```
+
+Downloads are capped at 100 MB per image and API calls retry transient
+failures (429/5xx) with exponential backoff, so a flaky image host cannot
+break a scheduled rotation.
 
 ## Uninstalling
 
